@@ -12,6 +12,14 @@
       #toolbar input[type='number'] { width: 70px; }
       #toolbar button { background: #0e639c; color: #fff; border: none; padding: 4px 10px; cursor: pointer; }
       #toolbar button:hover { background: #1177bb; }
+      #configbar {
+        display: flex; gap: 6px; padding: 4px 6px; align-items: center;
+        background: #252526; color: #bbb; font-size: 12px; flex-wrap: wrap;
+        border-bottom: 1px solid #333;
+      }
+      #configbar select, #configbar input { background: #2d2d2d; color: #eee; border: 1px solid #444; padding: 2px 5px; }
+      #configbar button { background: #3a3d41; color: #fff; border: none; padding: 3px 8px; cursor: pointer; }
+      #configbar button:hover { background: #4a4d51; }
       #status { margin-left: auto; font-size: 12px; color: #9cdcfe; }
       #editor { flex: 1; min-height: 0; }
       #logpanel {
@@ -29,6 +37,14 @@
   </head>
   <body>
     <div id="app">
+      <div id="configbar">
+        <label>Profile:</label>
+        <select id="profile"><option value="">— last used —</option></select>
+        <input id="profileName" placeholder="name to save as" />
+        <button id="save-profile">Save</button>
+        <button id="del-profile">Delete</button>
+        <label style="margin-left:8px;"><input type="checkbox" id="remember-pw" checked /> remember passwords</label>
+      </div>
       <div id="toolbar">
         <input id="server" placeholder="server" value="symitartest" />
         <input id="aixUser" placeholder="AIX user" />

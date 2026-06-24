@@ -31,6 +31,108 @@ registerRepgenLanguage(monaco, languageData);
 const el = (id: string) => document.getElementById(id) as HTMLInputElement;
 const status = document.getElementById('status') as HTMLSpanElement;
 
+// ---- form persistence + saved connection profiles -------------------------
+// Stored in localStorage (the app's user-data dir, local to this machine).
+const FIELD_IDS = ['server', 'aixUser', 'aixPass', 'sym', 'userId', 'fileName'] as const;
+const SECRET_IDS = new Set(['aixPass', 'userId']);
+const LAST_KEY = 'repdev:last';
+const PROFILES_KEY = 'repdev:profiles';
+type FieldMap = Record<string, string>;
+
+function rememberPasswords(): boolean {
+  return (document.getElementById('remember-pw') as HTMLInputElement).checked;
+}
+
+function readFields(): FieldMap {
+  const out: FieldMap = {};
+  for (const id of FIELD_IDS) {
+    const keep = !SECRET_IDS.has(id) || rememberPasswords();
+    out[id] = keep ? el(id).value : '';
+  }
+  return out;
+}
+
+function writeFields(data: FieldMap): void {
+  for (const id of FIELD_IDS) {
+    if (data[id] !== undefined) el(id).value = data[id];
+  }
+}
+
+function loadJSON<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Persist the current form (called on every edit + on connect). */
+function persistLast(): void {
+  localStorage.setItem(LAST_KEY, JSON.stringify(readFields()));
+}
+
+function getProfiles(): Record<string, FieldMap> {
+  return loadJSON<Record<string, FieldMap>>(PROFILES_KEY, {});
+}
+
+function refreshProfileList(selected = ''): void {
+  const sel = document.getElementById('profile') as HTMLSelectElement;
+  const names = Object.keys(getProfiles()).sort();
+  sel.innerHTML = '<option value="">— last used —</option>';
+  for (const name of names) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    if (name === selected) opt.selected = true;
+    sel.append(opt);
+  }
+}
+
+function initConfigUI(): void {
+  // Restore last-used values, then wire persistence + profile controls.
+  writeFields(loadJSON<FieldMap>(LAST_KEY, {}));
+  refreshProfileList();
+
+  for (const id of FIELD_IDS) el(id).addEventListener('input', persistLast);
+
+  (document.getElementById('profile') as HTMLSelectElement).addEventListener('change', (e) => {
+    const name = (e.target as HTMLSelectElement).value;
+    if (!name) return;
+    const profile = getProfiles()[name];
+    if (profile) {
+      writeFields(profile);
+      (document.getElementById('profileName') as HTMLInputElement).value = name;
+      persistLast();
+    }
+  });
+
+  document.getElementById('save-profile')!.addEventListener('click', () => {
+    const nameInput = document.getElementById('profileName') as HTMLInputElement;
+    const name = nameInput.value.trim();
+    if (!name) {
+      setStatus('Enter a profile name to save');
+      return;
+    }
+    const profiles = getProfiles();
+    profiles[name] = readFields();
+    localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
+    refreshProfileList(name);
+    setStatus(`Saved profile "${name}"`);
+  });
+
+  document.getElementById('del-profile')!.addEventListener('click', () => {
+    const sel = document.getElementById('profile') as HTMLSelectElement;
+    const name = sel.value;
+    if (!name) return;
+    const profiles = getProfiles();
+    delete profiles[name];
+    localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
+    refreshProfileList();
+    setStatus(`Deleted profile "${name}"`);
+  });
+}
+
 const editor = monaco.editor.create(document.getElementById('editor')!, {
   value: '',
   language: REPGEN_LANGUAGE_ID,
@@ -56,6 +158,8 @@ window.repdev.onLog(appendLog);
 document.getElementById('log-clear')!.addEventListener('click', () => {
   logLines.textContent = '';
 });
+
+initConfigUI(); // restore saved fields + wire profile controls
 
 document.getElementById('connect')!.addEventListener('click', () => void connect());
 document.getElementById('open')!.addEventListener('click', () => void openFile());
@@ -93,6 +197,7 @@ async function showDiff(): Promise<void> {
 
 async function connect(): Promise<void> {
   const sym = Number(el('sym').value);
+  persistLast(); // keep the entered values even if the connection fails
   setStatus('Connecting…');
   const err = await window.repdev.connect({
     server: el('server').value,
