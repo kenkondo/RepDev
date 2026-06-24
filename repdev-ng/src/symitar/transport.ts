@@ -191,6 +191,10 @@ export interface SshConnectOptions {
   username: string;
   password: string;
   readyTimeoutMs?: number;
+  /** Command to run with a PTY, mirroring `ssh user@host -t '<command>'`.
+   * Defaults to /usr/bin/ksh because the Symitar service account's *default*
+   * login shell is often the console launcher, not a usable shell. */
+  command?: string;
 }
 
 /**
@@ -229,9 +233,12 @@ export class SshTransport implements Transport {
         reject(err);
       };
 
+      const command = opts.command ?? '/usr/bin/ksh';
       conn.on('ready', () => {
-        // Request a PTY-backed shell; the Symitar protocol expects a terminal.
-        conn.shell({ term: 'xterm', cols: 132, rows: 50 }, (err, channel) => {
+        // Run the shell command with a PTY, equivalent to `ssh -t '<command>'`.
+        // The service account's default shell is often not a usable shell, so we
+        // explicitly exec ksh rather than using conn.shell().
+        conn.exec(command, { pty: { term: 'xterm', cols: 132, rows: 50 } }, (err, channel) => {
           if (err) return fail(err);
           settled = true;
           resolve(new SshTransport(conn, channel));
