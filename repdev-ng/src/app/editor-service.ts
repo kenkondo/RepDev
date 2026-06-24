@@ -87,15 +87,22 @@ export class EditorService {
     private mirror?: SaveMirror,
   ) {}
 
+  private connectLogger?: (message: string) => void;
+
   /** Enable/disable the Git mirror at runtime (e.g. disable if Git is missing). */
   setMirror(mirror?: SaveMirror): void {
     this.mirror = mirror;
   }
 
+  /** Diagnostics sink applied to every connect() handshake. */
+  setConnectLogger(logger?: (message: string) => void): void {
+    this.connectLogger = logger;
+  }
+
   async connect(opts: ConnectOptions): Promise<SessionError> {
     if (this.sessions.has(opts.sym)) return SessionError.ALREADY_CONNECTED;
     const session = this.sessionFactory();
-    const err = await session.connect(opts);
+    const err = await session.connect({ onLog: this.connectLogger, ...opts });
     if (err === SessionError.NONE) this.sessions.set(opts.sym, session);
     return err;
   }

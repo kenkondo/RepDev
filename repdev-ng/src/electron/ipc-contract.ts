@@ -36,8 +36,8 @@ export const IPC = {
   printFileLPT: 'repdev:printFileLPT',
 } as const;
 
-/** Connect args are ConnectOptions minus the injectable transport (main owns sockets). */
-export type ConnectArgs = Omit<ConnectOptions, 'transport'>;
+/** Connect args drop the non-serializable fields (transport + onLog callback). */
+export type ConnectArgs = Omit<ConnectOptions, 'transport' | 'onLog'>;
 
 export interface RepDevApi {
   connect(args: ConnectArgs): Promise<SessionError>;

@@ -80,6 +80,8 @@ async function initMirror(): Promise<void> {
 }
 
 app.whenReady().then(() => {
+  // Route connection-handshake diagnostics to the log file for troubleshooting.
+  service.setConnectLogger((m) => logToFile('connect', m));
   registerIpc(ipcMain, service);
   createWindow();
   void initMirror(); // background — does not block the window

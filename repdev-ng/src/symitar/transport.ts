@@ -13,6 +13,7 @@
  * for sub-256 values.
  */
 import net from 'node:net';
+import { Client, type ClientChannel } from 'ssh2';
 
 export interface Transport {
   /** Read until any of the given marker substrings appears; resolves with the
@@ -168,5 +169,122 @@ export class SocketTransport implements Transport {
 
   close(): void {
     this.socket.destroy();
+  }
+}
+
+export interface SshConnectOptions {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  readyTimeoutMs?: number;
+}
+
+/**
+ * Transport over an SSH shell channel (replaces the Java `plink` path). ssh2 is
+ * pure-JS; we open an interactive shell with a PTY and treat its byte stream
+ * exactly like the telnet socket. A broad, legacy-friendly algorithm set is
+ * enabled because Symitar AIX hosts are often old OpenSSH builds.
+ */
+export class SshTransport implements Transport {
+  private conn: Client;
+  private channel: ClientChannel;
+  private buf = new ByteBuffer();
+
+  private constructor(conn: Client, channel: ClientChannel) {
+    this.conn = conn;
+    this.channel = channel;
+    channel.on('data', (d: Buffer) => this.buf.push(d.toString('latin1')));
+    if (channel.stderr) channel.stderr.on('data', (d: Buffer) => this.buf.push(d.toString('latin1')));
+    channel.on('close', () => this.buf.end());
+    conn.on('error', (err) => this.buf.end(err));
+    conn.on('close', () => this.buf.end());
+  }
+
+  static connect(opts: SshConnectOptions): Promise<SshTransport> {
+    return new Promise((resolve, reject) => {
+      const conn = new Client();
+      let settled = false;
+      const fail = (err: Error) => {
+        if (settled) return;
+        settled = true;
+        try {
+          conn.end();
+        } catch {
+          /* ignore */
+        }
+        reject(err);
+      };
+
+      conn.on('ready', () => {
+        // Request a PTY-backed shell; the Symitar protocol expects a terminal.
+        conn.shell({ term: 'xterm', cols: 132, rows: 50 }, (err, channel) => {
+          if (err) return fail(err);
+          settled = true;
+          resolve(new SshTransport(conn, channel));
+        });
+      });
+      conn.on('error', (err) => fail(err as Error));
+
+      conn.connect({
+        host: opts.host,
+        port: opts.port,
+        username: opts.username,
+        password: opts.password,
+        readyTimeout: opts.readyTimeoutMs ?? 20000,
+        // Accept any host key (parity with the original, which relied on PuTTY's cache).
+        hostVerifier: () => true,
+        // Enable legacy algorithms for older AIX SSH servers.
+        algorithms: {
+          kex: [
+            'curve25519-sha256',
+            'ecdh-sha2-nistp256',
+            'diffie-hellman-group-exchange-sha256',
+            'diffie-hellman-group14-sha256',
+            'diffie-hellman-group14-sha1',
+            'diffie-hellman-group-exchange-sha1',
+            'diffie-hellman-group1-sha1',
+          ] as never,
+          serverHostKey: [
+            'ssh-ed25519',
+            'ecdsa-sha2-nistp256',
+            'rsa-sha2-512',
+            'rsa-sha2-256',
+            'ssh-rsa',
+            'ssh-dss',
+          ] as never,
+          cipher: [
+            'aes128-ctr',
+            'aes192-ctr',
+            'aes256-ctr',
+            'aes128-cbc',
+            'aes192-cbc',
+            'aes256-cbc',
+            '3des-cbc',
+          ] as never,
+          hmac: ['hmac-sha2-256', 'hmac-sha1', 'hmac-md5'] as never,
+        },
+      });
+    });
+  }
+
+  readUntil(...markers: string[]): Promise<string> {
+    return this.buf.readUntil(markers);
+  }
+
+  read(n: number): Promise<string> {
+    return this.buf.read(n);
+  }
+
+  write(data: string): void {
+    this.channel.write(Buffer.from(data, 'latin1'));
+  }
+
+  close(): void {
+    try {
+      this.conn.end();
+    } catch {
+      /* ignore */
+    }
   }
 }

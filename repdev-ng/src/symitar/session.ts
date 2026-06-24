@@ -11,7 +11,7 @@
  */
 import { Command } from './command.js';
 import type { Transport } from './transport.js';
-import { SocketTransport } from './transport.js';
+import { SocketTransport, SshTransport } from './transport.js';
 import {
   ErrorCheckResult,
   ErrorCheckType,
@@ -81,6 +81,10 @@ export interface ConnectOptions {
   sym: number;
   userID: string;
   transport?: Transport; // injectable for tests; defaults to a TCP socket
+  /** Force SSH (default: inferred from port === 22). */
+  useSSH?: boolean;
+  /** Optional diagnostics sink; receives a line for each handshake step. */
+  onLog?: (message: string) => void;
 }
 
 export interface SymitarSession {
@@ -126,8 +130,20 @@ export class DirectSymitarSession implements SymitarSession {
   consoleNum = -1;
   symRev = '';
 
+  private logFn?: (message: string) => void;
+
   isConnected(): boolean {
     return this.connected;
+  }
+
+  private log(message: string): void {
+    this.logFn?.(message);
+  }
+
+  /** Escapes control bytes so received data is readable in the diagnostics log. */
+  private static sanitize(s: string, max = 200): string {
+    const tail = s.length > max ? s.slice(-max) : s;
+    return tail.replace(/[\x00-\x1f\x7f-\xff]/g, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, '0')}`);
   }
 
   // ---- low-level framing (ports write / readNextCommand / readUntil) --------
@@ -171,34 +187,67 @@ export class DirectSymitarSession implements SymitarSession {
     this.server = opts.server;
     this.port = opts.port;
     this.sym = opts.sym;
+    this.logFn = opts.onLog;
 
+    const useSSH = opts.useSSH ?? opts.port === 22;
+    this.log(`connect: host=${opts.server} port=${opts.port} sym=${opts.sym} user=${opts.aixUsername} mode=${useSSH ? 'SSH' : 'telnet'}`);
+
+    // ---- establish the transport ----
     try {
-      this.transport = opts.transport ?? (await SocketTransport.connect(opts.server, opts.port));
-    } catch {
+      if (opts.transport) {
+        this.transport = opts.transport;
+      } else if (useSSH) {
+        this.log('opening SSH connection…');
+        this.transport = await SshTransport.connect({
+          host: opts.server,
+          port: opts.port,
+          username: opts.aixUsername,
+          password: opts.aixPassword,
+        });
+        this.log('SSH shell channel established');
+      } else {
+        this.transport = await SocketTransport.connect(opts.server, opts.port);
+        this.log('TCP socket established');
+      }
+    } catch (e) {
+      const msg = (e as Error).message || String(e);
+      this.log(`transport connect failed: ${msg}`);
+      if (/authentication|password|permission denied/i.test(msg)) {
+        return SessionError.AIX_LOGIN_WRONG;
+      }
       return SessionError.SERVER_NOT_FOUND;
     }
 
     try {
-      // Raw-telnet negotiation bytes (aixterm terminal type), sent verbatim.
-      this.write('\xff\xfb\x18');
-      this.write('\xff\xfa\x18\x00aixterm\xff\xf0');
-      this.write('\xff\xfd\x01');
-      this.write('\xff\xfd\x03\xff\xfc\x1f\xff\xfc\x01');
+      if (!useSSH) {
+        // Raw-telnet negotiation bytes (aixterm terminal type), sent verbatim.
+        this.write('\xff\xfb\x18');
+        this.write('\xff\xfa\x18\x00aixterm\xff\xf0');
+        this.write('\xff\xfd\x01');
+        this.write('\xff\xfd\x03\xff\xfc\x1f\xff\xfc\x01');
 
-      this.write(opts.aixUsername + '\r');
-      let temp = await this.readUntil('Password:', 'password:', '[c');
+        this.log('telnet: sending AIX username');
+        this.write(opts.aixUsername + '\r');
+        const temp = await this.readUntil('Password:', 'password:', '[c');
+        this.log(`telnet: after username -> ${DirectSymitarSession.sanitize(temp)}`);
 
-      if (temp.indexOf('[c') === -1) {
-        this.write(opts.aixPassword + '\r');
-        const line = await this.readUntil('[c', 'invalid login name or password');
-        if (line.indexOf('invalid login') !== -1) {
-          await this.disconnect();
-          return SessionError.AIX_LOGIN_WRONG;
+        if (temp.indexOf('[c') === -1) {
+          this.log('telnet: sending AIX password');
+          this.write(opts.aixPassword + '\r');
+          const line = await this.readUntil('[c', 'invalid login name or password');
+          this.log(`telnet: after password -> ${DirectSymitarSession.sanitize(line)}`);
+          if (line.indexOf('invalid login') !== -1) {
+            await this.disconnect();
+            return SessionError.AIX_LOGIN_WRONG;
+          }
         }
+      } else {
+        this.log('SSH: authenticated via SSH; skipping in-band login prompt');
       }
 
+      this.log('sending WINDOWSLEVEL=3');
       this.write('WINDOWSLEVEL=3\n');
-      temp = await this.readUntil(
+      const temp = await this.readUntil(
         '$ ',
         'SymStart~Global',
         'no longer supported!',
@@ -206,6 +255,7 @@ export class DirectSymitarSession implements SymitarSession {
         'Your password has expired.',
         'invalid login name or password',
       );
+      this.log(`after WINDOWSLEVEL=3 -> ${DirectSymitarSession.sanitize(temp)}`);
 
       if (temp.indexOf('no longer supported!') !== -1) {
         await this.disconnect();
@@ -220,7 +270,10 @@ export class DirectSymitarSession implements SymitarSession {
         await this.disconnect();
         return SessionError.AIX_LOGIN_WRONG;
       } else if (temp.indexOf('$ ') !== -1) {
+        this.log(`shell prompt detected; sending: sym ${opts.sym}`);
         this.write('sym ' + opts.sym + '\r');
+      } else {
+        this.log('SymStart~Global detected; console already running');
       }
 
       // Drain login commands until the host is waiting for input (HelpCode 10025).
@@ -228,6 +281,7 @@ export class DirectSymitarSession implements SymitarSession {
       try {
         do {
           current = await this.readNextCommand();
+          this.log(`login cmd: ${current.command}`);
           if (current.command === 'SymLogonDir') {
             this.actualSym = parseInt((current.get('Dir') ?? '').trim(), 10);
           } else if (current.command === 'SymLogonRev') {
@@ -244,17 +298,21 @@ export class DirectSymitarSession implements SymitarSession {
           }
         } while (current.command !== 'Input' || current.get('HelpCode') !== '10025');
       } catch (e) {
+        const msg = (e as Error).message;
+        this.log(`login drain error: ${msg}`);
         await this.disconnect();
-        return (e as Error).message.indexOf('SYM not Found') !== -1
+        return msg.indexOf('SYM not Found') !== -1
           ? SessionError.SYM_INVALID
           : SessionError.IO_ERROR;
       }
-    } catch {
+    } catch (e) {
+      this.log(`handshake error: ${(e as Error).stack ?? String(e)}`);
       await this.disconnect();
       return SessionError.IO_ERROR;
     }
 
     this.loggedInAIX = true;
+    this.log('AIX login complete; logging into SYM');
     return this.loginUser(opts.userID);
   }
 
