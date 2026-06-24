@@ -34,7 +34,7 @@ const status = document.getElementById('status') as HTMLSpanElement;
 
 // ---- form persistence + saved connection profiles -------------------------
 // Stored in localStorage (the app's user-data dir, local to this machine).
-const FIELD_IDS = ['server', 'aixUser', 'aixPass', 'sym', 'userId', 'fileName'] as const;
+const FIELD_IDS = ['server', 'aixUser', 'aixPass', 'sym', 'userId', 'sshCommand', 'fileName'] as const;
 const SECRET_IDS = new Set(['aixPass', 'userId']);
 const LAST_KEY = 'repdev:last';
 const PROFILES_KEY = 'repdev:profiles';
@@ -311,6 +311,7 @@ async function connect(): Promise<void> {
     aixPassword: el('aixPass').value,
     sym,
     userID: el('userId').value,
+    command: el('sshCommand').value,
   });
   if (err === 'NONE') {
     currentSym = sym;

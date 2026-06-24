@@ -83,6 +83,10 @@ export interface ConnectOptions {
   transport?: Transport; // injectable for tests; defaults to a TCP socket
   /** Force SSH (default: inferred from port === 22). */
   useSSH?: boolean;
+  /** SSH: command to run with a PTY. Must be a LOGIN shell so /etc/profile and
+   * ~/.profile run and put the Symitar bin dir on PATH (so `sym` resolves).
+   * Defaults to "/usr/bin/ksh -l". */
+  command?: string;
   /** Optional diagnostics sink; receives a line for each handshake step. */
   onLog?: (message: string) => void;
 }
@@ -226,12 +230,14 @@ export class DirectSymitarSession implements SymitarSession {
       if (opts.transport) {
         this.transport = opts.transport;
       } else if (useSSH) {
-        this.log('opening SSH connection…');
+        const command = opts.command?.trim() || '/usr/bin/ksh -l';
+        this.log(`opening SSH connection… (command: ${command})`);
         this.transport = await SshTransport.connect({
           host: opts.server,
           port: opts.port,
           username: opts.aixUsername,
           password: opts.aixPassword,
+          command,
         });
         this.log('SSH shell channel established');
       } else {
