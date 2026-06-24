@@ -75,6 +75,21 @@ describe('GitMirror against a real git repo', () => {
     expect(diff.host).toBe('host-now\n');
   });
 
+  it('constructs without throwing when the repo dir does not exist yet, then init creates it', async () => {
+    // Regression: simpleGit() validates the dir at construction time, which
+    // crashed the packaged app on a fresh machine (mirror dir absent).
+    const missing = path.join(tmp, 'does', 'not', 'exist', 'yet');
+    expect(() => new GitMirror(missing)).not.toThrow();
+    const mirror = new GitMirror(missing);
+    await mirror.init();
+    const hash = await mirror.commitSave(REPGEN('A.RG'), 'x\n', {
+      error: SessionError.NONE,
+      diagnostics: [],
+      clean: true,
+    });
+    expect(hash).toBeTruthy();
+  });
+
   it('buildCommitMessage formats each verdict kind', () => {
     expect(
       buildCommitMessage(REPGEN('X.RG'), { error: SessionError.NONE, diagnostics: [], clean: true }, 'me'),

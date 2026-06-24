@@ -42,14 +42,23 @@ export function buildCommitMessage(file: SymitarFile, result: SaveResult, author
 }
 
 export class GitMirror {
-  private git: SimpleGit;
+  // simpleGit() validates that repoDir exists *at construction time*, so we
+  // defer creating it until init() has ensured the directory exists. This is
+  // why a fresh app (no mirror dir yet) must not build the instance eagerly.
+  private gitInstance: SimpleGit | null = null;
 
   constructor(
     private repoDir: string,
     private author = 'RepDev NG',
     private authorEmail = 'repdev@localhost',
-  ) {
-    this.git = simpleGit(repoDir);
+  ) {}
+
+  /** The git client; throws if init() hasn't run (callers/EditorService guard this). */
+  private get git(): SimpleGit {
+    if (!this.gitInstance) {
+      throw new Error('GitMirror.init() must be called before use');
+    }
+    return this.gitInstance;
   }
 
   /** Path within the mirror repo for a host file: <sym>/<TYPE>/<name>. */
@@ -57,9 +66,10 @@ export class GitMirror {
     return path.posix.join(String(file.sym), file.type, file.name);
   }
 
-  /** Initialise the repo if it isn't one yet (idempotent). */
+  /** Initialise the repo if it isn't one yet (idempotent). Creates the dir first. */
   async init(): Promise<void> {
     await mkdir(this.repoDir, { recursive: true });
+    this.gitInstance = simpleGit(this.repoDir); // dir now exists
     if (!(await this.git.checkIsRepo())) {
       await this.git.init();
     }

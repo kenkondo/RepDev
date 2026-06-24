@@ -87,6 +87,11 @@ export class EditorService {
     private mirror?: SaveMirror,
   ) {}
 
+  /** Enable/disable the Git mirror at runtime (e.g. disable if Git is missing). */
+  setMirror(mirror?: SaveMirror): void {
+    this.mirror = mirror;
+  }
+
   async connect(opts: ConnectOptions): Promise<SessionError> {
     if (this.sessions.has(opts.sym)) return SessionError.ALREADY_CONNECTED;
     const session = this.sessionFactory();
@@ -162,8 +167,13 @@ export class EditorService {
 
     // Mirror to Git: the host save succeeded, so record it with its verdict —
     // including error verdicts, so history shows what failed to compile/install.
+    // A mirror failure (e.g. Git not installed) must never break the host save.
     if (this.mirror) {
-      result.commit = await this.mirror.commitSave(file, text, result);
+      try {
+        result.commit = await this.mirror.commitSave(file, text, result);
+      } catch {
+        result.commit = null;
+      }
     }
     return result;
   }
