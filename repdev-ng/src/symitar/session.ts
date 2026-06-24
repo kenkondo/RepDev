@@ -131,6 +131,7 @@ export class DirectSymitarSession implements SymitarSession {
   symRev = '';
 
   private logFn?: (message: string) => void;
+  private traceConnect = false;
 
   isConnected(): boolean {
     return this.connected;
@@ -193,6 +194,20 @@ export class DirectSymitarSession implements SymitarSession {
     this.log(`connect: host=${opts.server} port=${opts.port} sym=${opts.sym} user=${opts.aixUsername} mode=${useSSH ? 'SSH' : 'telnet'}`);
 
     // ---- establish the transport ----
+    // Trace raw handshake I/O to the log (disabled once connected, so file
+    // contents are never traced). Invaluable for diagnosing host-specific flows.
+    const installTrace = () => {
+      this.traceConnect = true;
+      this.transport?.trace?.(
+        (recv) => {
+          if (this.traceConnect) this.log(`<< ${DirectSymitarSession.sanitize(recv, 400)}`);
+        },
+        (send) => {
+          if (this.traceConnect) this.log(`>> ${DirectSymitarSession.sanitize(send, 400)}`);
+        },
+      );
+    };
+
     try {
       if (opts.transport) {
         this.transport = opts.transport;
@@ -217,6 +232,8 @@ export class DirectSymitarSession implements SymitarSession {
       }
       return SessionError.SERVER_NOT_FOUND;
     }
+
+    installTrace();
 
     try {
       if (!useSSH) {
@@ -363,6 +380,7 @@ export class DirectSymitarSession implements SymitarSession {
       if (cn !== undefined) this.consoleNum = parseInt(cn, 10);
 
       this.connected = true;
+      this.traceConnect = false; // stop tracing; never log file-transfer contents
     } catch {
       await this.disconnect();
       return SessionError.IO_ERROR;

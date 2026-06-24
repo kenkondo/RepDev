@@ -44,6 +44,19 @@ function setStatus(text: string): void {
   status.textContent = text;
 }
 
+// Live connection log: append lines pushed from the main process.
+const logLines = document.getElementById('log-lines') as HTMLDivElement;
+function appendLog(line: string): void {
+  const ts = new Date().toLocaleTimeString();
+  logLines.append(`${ts}  ${line}\n`);
+  const panel = document.getElementById('logpanel') as HTMLDivElement;
+  panel.scrollTop = panel.scrollHeight;
+}
+window.repdev.onLog(appendLog);
+document.getElementById('log-clear')!.addEventListener('click', () => {
+  logLines.textContent = '';
+});
+
 document.getElementById('connect')!.addEventListener('click', () => void connect());
 document.getElementById('open')!.addEventListener('click', () => void openFile());
 document.getElementById('save')!.addEventListener('click', () => void saveFile('check'));

@@ -3,7 +3,7 @@
  * contextBridge. The renderer never touches Node or ipcRenderer directly.
  */
 import { contextBridge, ipcRenderer } from 'electron';
-import { IPC, type RepDevApi } from './ipc-contract.js';
+import { IPC, LOG_EVENT, type RepDevApi } from './ipc-contract.js';
 
 const api: RepDevApi = {
   connect: (args) => ipcRenderer.invoke(IPC.connect, args),
@@ -23,6 +23,11 @@ const api: RepDevApi = {
   getReportSeqs: (sym, reportName, time, search, limit) =>
     ipcRenderer.invoke(IPC.getReportSeqs, sym, reportName, time, search, limit),
   printFileLPT: (file, queue, opts) => ipcRenderer.invoke(IPC.printFileLPT, file, queue, opts),
+  onLog: (callback) => {
+    const listener = (_e: unknown, line: string) => callback(line);
+    ipcRenderer.on(LOG_EVENT, listener);
+    return () => ipcRenderer.removeListener(LOG_EVENT, listener);
+  },
 };
 
 contextBridge.exposeInMainWorld('repdev', api);

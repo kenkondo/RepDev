@@ -36,6 +36,9 @@ export const IPC = {
   printFileLPT: 'repdev:printFileLPT',
 } as const;
 
+/** Main -> renderer push channel for live log lines (not an invoke handler). */
+export const LOG_EVENT = 'repdev:log';
+
 /** Connect args drop the non-serializable fields (transport + onLog callback). */
 export type ConnectArgs = Omit<ConnectOptions, 'transport' | 'onLog'>;
 
@@ -62,6 +65,8 @@ export interface RepDevApi {
   getPrintItems(sym: number, query: string, limit: number): Promise<PrintItem[]>;
   getReportSeqs(sym: number, reportName: string, time: number, search: number, limit: number): Promise<Sequence[]>;
   printFileLPT(file: SymitarFile, queue: number, opts?: PrintLptOptions): Promise<SessionError>;
+  /** Subscribe to live log lines (connection handshake, etc.); returns an unsubscribe fn. */
+  onLog(callback: (line: string) => void): () => void;
 }
 
 declare global {

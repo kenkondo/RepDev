@@ -26,6 +26,9 @@ export interface Transport {
   write(data: string): void;
   /** Close the connection. */
   close(): void;
+  /** Optional diagnostic tap: onRecv fires for every received chunk, onSend for
+   * every write. Used to trace the login handshake. */
+  trace?(onRecv: (data: string) => void, onSend: (data: string) => void): void;
 }
 
 export class ConnectionClosedError extends Error {
@@ -43,6 +46,8 @@ export class ConnectionClosedError extends Error {
 export class ByteBuffer {
   private buffer = '';
   private closed = false;
+  /** Optional diagnostic tap, fired for every received chunk. */
+  onPush?: (data: string) => void;
   private pending:
     | { kind: 'until'; markers: string[]; resolve: (s: string) => void; reject: (e: Error) => void }
     | { kind: 'exact'; n: number; resolve: (s: string) => void; reject: (e: Error) => void }
@@ -50,6 +55,7 @@ export class ByteBuffer {
 
   /** Feed newly received latin1 data. */
   push(data: string): void {
+    this.onPush?.(data);
     this.buffer += data;
     this.tryResolve();
   }
@@ -164,11 +170,18 @@ export class SocketTransport implements Transport {
   }
 
   write(data: string): void {
+    this.onSend?.(data);
     this.socket.write(data, 'latin1');
   }
 
   close(): void {
     this.socket.destroy();
+  }
+
+  private onSend?: (data: string) => void;
+  trace(onRecv: (data: string) => void, onSend: (data: string) => void): void {
+    this.buf.onPush = onRecv;
+    this.onSend = onSend;
   }
 }
 
@@ -226,11 +239,18 @@ export class SshTransport implements Transport {
       });
       conn.on('error', (err) => fail(err as Error));
 
+      // AIX OpenSSH usually authenticates via keyboard-interactive (PAM) rather
+      // than the plain "password" method. Answer every prompt with the password.
+      conn.on('keyboard-interactive', (_name, _instructions, _lang, _prompts, finish) => {
+        finish(_prompts.map(() => opts.password));
+      });
+
       conn.connect({
         host: opts.host,
         port: opts.port,
         username: opts.username,
         password: opts.password,
+        tryKeyboard: true, // enable keyboard-interactive fallback for PAM/AIX
         readyTimeout: opts.readyTimeoutMs ?? 20000,
         // Accept any host key (parity with the original, which relied on PuTTY's cache).
         hostVerifier: () => true,
@@ -277,6 +297,7 @@ export class SshTransport implements Transport {
   }
 
   write(data: string): void {
+    this.onSend?.(data);
     this.channel.write(Buffer.from(data, 'latin1'));
   }
 
@@ -286,5 +307,11 @@ export class SshTransport implements Transport {
     } catch {
       /* ignore */
     }
+  }
+
+  private onSend?: (data: string) => void;
+  trace(onRecv: (data: string) => void, onSend: (data: string) => void): void {
+    this.buf.onPush = onRecv;
+    this.onSend = onSend;
   }
 }

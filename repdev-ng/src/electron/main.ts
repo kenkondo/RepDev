@@ -15,6 +15,7 @@ import path from 'node:path';
 import { EditorService } from '../app/editor-service.js';
 import { GitMirror } from '../git/git-mirror.js';
 import { registerIpc } from './ipc.js';
+import { LOG_EVENT } from './ipc-contract.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -79,9 +80,19 @@ async function initMirror(): Promise<void> {
   }
 }
 
+/** Push a log line to every open window so it can be shown live in the UI. */
+function broadcastLog(line: string): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send(LOG_EVENT, line);
+  }
+}
+
 app.whenReady().then(() => {
-  // Route connection-handshake diagnostics to the log file for troubleshooting.
-  service.setConnectLogger((m) => logToFile('connect', m));
+  // Route connection-handshake diagnostics to the log file AND the live UI panel.
+  service.setConnectLogger((m) => {
+    logToFile('connect', m);
+    broadcastLog(m);
+  });
   registerIpc(ipcMain, service);
   createWindow();
   void initMirror(); // background — does not block the window
