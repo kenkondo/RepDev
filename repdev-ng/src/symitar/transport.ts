@@ -250,7 +250,10 @@ export class SshTransport implements Transport {
         port: opts.port,
         username: opts.username,
         password: opts.password,
-        tryKeyboard: true, // enable keyboard-interactive fallback for PAM/AIX
+        tryKeyboard: true, // enable keyboard-interactive (PAM/AIX)
+        // Try keyboard-interactive (PAM) BEFORE plain password so we don't burn
+        // the server's MaxAuthTries on a password method it may not accept.
+        authHandler: ['keyboard-interactive', 'password'] as never,
         readyTimeout: opts.readyTimeoutMs ?? 20000,
         // Accept any host key (parity with the original, which relied on PuTTY's cache).
         hostVerifier: () => true,
