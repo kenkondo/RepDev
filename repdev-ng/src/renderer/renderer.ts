@@ -83,7 +83,7 @@ async function connect(): Promise<void> {
   setStatus('Connecting…');
   const err = await window.repdev.connect({
     server: el('server').value,
-    port: Number(el('port').value),
+    port: 22, // SSH only — telnet is not permitted
     aixUsername: el('aixUser').value,
     aixPassword: el('aixPass').value,
     sym,
