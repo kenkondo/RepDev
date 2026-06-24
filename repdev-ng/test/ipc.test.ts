@@ -1,10 +1,14 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { registerIpc, type IpcHandlerRegistrar } from '../src/electron/ipc.js';
+import { registerIpc, registerProjectIpc, type IpcHandlerRegistrar } from '../src/electron/ipc.js';
 import { IPC } from '../src/electron/ipc-contract.js';
 import { EditorService } from '../src/app/editor-service.js';
+import { ProjectManager } from '../src/app/project-manager.js';
 import { SocketTransport } from '../src/symitar/transport.js';
 import { FileType, SessionError } from '../src/symitar/types.js';
 import { MockHost, scriptLogin } from './mock-host.js';
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 /** Fake ipcMain that records handlers and lets the test invoke them. */
 class FakeIpc implements IpcHandlerRegistrar {
@@ -31,6 +35,7 @@ describe('IPC wiring', () => {
   it('registers every contract channel', () => {
     const ipc = new FakeIpc();
     registerIpc(ipc, new EditorService());
+    registerProjectIpc(ipc, new ProjectManager('unused-in-this-test.json'));
     for (const channel of Object.values(IPC)) {
       expect(ipc.handlers.has(channel)).toBe(true);
     }
@@ -63,5 +68,29 @@ describe('IPC wiring', () => {
     expect(data).toBe(content);
 
     await ipc.invoke(IPC.disconnect, 999);
+  });
+
+  it('routes project create/list/addFile through to a persisting ProjectManager', async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'repdev-ipc-proj-'));
+    const store = path.join(tmp, 'projects.json');
+    try {
+      const ipc = new FakeIpc();
+      registerProjectIpc(ipc, new ProjectManager(store));
+
+      await ipc.invoke(IPC.projectCreate, 'Nightly', 945);
+      await ipc.invoke(IPC.projectAddFile, 'Nightly', 945, { sym: 945, name: 'A.RG', type: FileType.REPGEN });
+      const list = (await ipc.invoke(IPC.projectsList)) as { name: string; files: unknown[] }[];
+
+      expect(list).toHaveLength(1);
+      expect(list[0].name).toBe('Nightly');
+      expect(list[0].files).toHaveLength(1);
+
+      // Reload from disk via a fresh manager to confirm persistence.
+      const reloaded = new ProjectManager(store);
+      await reloaded.load();
+      expect(reloaded.find('Nightly', 945)?.files[0].name).toBe('A.RG');
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
   });
 });

@@ -14,7 +14,8 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { EditorService } from '../app/editor-service.js';
 import { GitMirror } from '../git/git-mirror.js';
-import { registerIpc } from './ipc.js';
+import { ProjectManager } from '../app/project-manager.js';
+import { registerIpc, registerProjectIpc } from './ipc.js';
 import { LOG_EVENT } from './ipc-contract.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -23,6 +24,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // of truth and every successful save is committed here with its compile verdict.
 const mirror = new GitMirror(path.join(app.getPath('userData'), 'mirror'), process.env.USERNAME || 'RepDev NG');
 const service = new EditorService(undefined, mirror);
+const projects = new ProjectManager(path.join(app.getPath('userData'), 'projects.json'));
 
 /** Append a line to a crash/diagnostics log in the user-data dir. */
 function logToFile(label: string, detail: unknown): void {
@@ -94,6 +96,8 @@ app.whenReady().then(() => {
     broadcastLog(m);
   });
   registerIpc(ipcMain, service);
+  registerProjectIpc(ipcMain, projects);
+  void projects.load();
   createWindow();
   void initMirror(); // background — does not block the window
 

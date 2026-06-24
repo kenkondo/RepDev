@@ -17,9 +17,15 @@
         background: #252526; color: #bbb; font-size: 12px; flex-wrap: wrap;
         border-bottom: 1px solid #333;
       }
-      #configbar select, #configbar input { background: #2d2d2d; color: #eee; border: 1px solid #444; padding: 2px 5px; }
-      #configbar button { background: #3a3d41; color: #fff; border: none; padding: 3px 8px; cursor: pointer; }
-      #configbar button:hover { background: #4a4d51; }
+      #configbar select, #configbar input,
+      #projectbar select, #projectbar input { background: #2d2d2d; color: #eee; border: 1px solid #444; padding: 2px 5px; }
+      #configbar button, #projectbar button { background: #3a3d41; color: #fff; border: none; padding: 3px 8px; cursor: pointer; }
+      #configbar button:hover, #projectbar button:hover { background: #4a4d51; }
+      #projectbar {
+        display: flex; gap: 6px; padding: 4px 6px; align-items: center;
+        background: #252526; color: #bbb; font-size: 12px; flex-wrap: wrap;
+        border-bottom: 1px solid #333;
+      }
       #status { margin-left: auto; font-size: 12px; color: #9cdcfe; }
       #editor { flex: 1; min-height: 0; }
       #logpanel {
@@ -59,9 +65,25 @@
         <button id="diff">Diff vs Git</button>
         <span id="status">Disconnected</span>
       </div>
+      <div id="projectbar">
+        <label>Project:</label>
+        <select id="project"><option value="">— none —</option></select>
+        <input id="newProjectName" placeholder="new project name" />
+        <button id="new-project">New</button>
+        <button id="del-project">Delete</button>
+        <button id="add-to-project">+ current RepGen</button>
+        <label>Files:</label>
+        <select id="project-files"><option value="">—</option></select>
+      </div>
       <div id="editor"></div>
       <div id="logpanel">
-        <div class="log-head"><span>Connection log</span><button id="log-clear">clear</button></div>
+        <div class="log-head">
+          <span>Connection log</span>
+          <span>
+            <label style="margin-right:8px;"><input type="checkbox" id="verbose" /> verbose (log all comms)</label>
+            <button id="log-clear">clear</button>
+          </span>
+        </div>
         <div id="log-lines"></div>
       </div>
       <div id="diff-overlay" style="display:none; position:absolute; inset:40px; border:2px solid #0e639c; background:#1e1e1e;">

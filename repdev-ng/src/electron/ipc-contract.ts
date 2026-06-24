@@ -17,6 +17,7 @@ import type {
 } from '../symitar/types.js';
 import type { PrintLptOptions, RunFMResult } from '../symitar/session.js';
 import type { CompileMode, Diagnostic, SaveResult } from '../app/editor-service.js';
+import type { Project } from '../app/project-manager.js';
 
 export const IPC = {
   connect: 'repdev:connect',
@@ -34,6 +35,12 @@ export const IPC = {
   getPrintItems: 'repdev:getPrintItems',
   getReportSeqs: 'repdev:getReportSeqs',
   printFileLPT: 'repdev:printFileLPT',
+  setVerbose: 'repdev:setVerbose',
+  projectsList: 'repdev:projectsList',
+  projectCreate: 'repdev:projectCreate',
+  projectDelete: 'repdev:projectDelete',
+  projectAddFile: 'repdev:projectAddFile',
+  projectRemoveFile: 'repdev:projectRemoveFile',
 } as const;
 
 /** Main -> renderer push channel for live log lines (not an invoke handler). */
@@ -67,6 +74,12 @@ export interface RepDevApi {
   printFileLPT(file: SymitarFile, queue: number, opts?: PrintLptOptions): Promise<SessionError>;
   /** Subscribe to live log lines (connection handshake, etc.); returns an unsubscribe fn. */
   onLog(callback: (line: string) => void): () => void;
+  setVerbose(on: boolean): Promise<void>;
+  projectsList(): Promise<Project[]>;
+  projectCreate(name: string, sym: number): Promise<Project>;
+  projectDelete(name: string, sym: number): Promise<boolean>;
+  projectAddFile(name: string, sym: number, file: SymitarFile): Promise<void>;
+  projectRemoveFile(name: string, sym: number, file: SymitarFile): Promise<void>;
 }
 
 declare global {

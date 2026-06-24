@@ -6,6 +6,7 @@
 import * as monaco from 'monaco-editor';
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import { FileType } from '../symitar/types.js';
+import type { Project } from '../app/project-manager.js';
 import { diagnosticToMarker } from './markers.js';
 import { loadLanguageData } from '../lang/data-loader.js';
 import { registerRepgenLanguage, REPGEN_LANGUAGE_ID } from '../lang/repgen-monaco.js';
@@ -159,7 +160,111 @@ document.getElementById('log-clear')!.addEventListener('click', () => {
   logLines.textContent = '';
 });
 
+// ---- verbose comms logging toggle -----------------------------------------
+const verboseBox = document.getElementById('verbose') as HTMLInputElement;
+verboseBox.addEventListener('change', () => {
+  void window.repdev.setVerbose(verboseBox.checked);
+  appendLog(`verbose logging ${verboseBox.checked ? 'ON' : 'OFF'}`);
+});
+
+// ---- projects (group host files; ported from RepDev's ProjectManager) ------
+let projectsCache: Project[] = [];
+
+function selectedProjectKey(): string {
+  return (document.getElementById('project') as HTMLSelectElement).value;
+}
+function findProject(key: string): Project | undefined {
+  const [name, symStr] = key.split('|');
+  const sym = Number(symStr);
+  return projectsCache.find((p) => p.name === name && p.sym === sym);
+}
+
+async function refreshProjects(selectKey = selectedProjectKey()): Promise<void> {
+  projectsCache = await window.repdev.projectsList();
+  const sel = document.getElementById('project') as HTMLSelectElement;
+  sel.innerHTML = '<option value="">— none —</option>';
+  for (const p of projectsCache) {
+    const key = `${p.name}|${p.sym}`;
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = `${p.name} [SYM ${p.sym}]`;
+    if (key === selectKey) opt.selected = true;
+    sel.append(opt);
+  }
+  refreshProjectFiles();
+}
+
+function refreshProjectFiles(): void {
+  const sel = document.getElementById('project-files') as HTMLSelectElement;
+  sel.innerHTML = '<option value="">—</option>';
+  const project = findProject(selectedProjectKey());
+  if (!project) return;
+  for (const f of project.files) {
+    const opt = document.createElement('option');
+    opt.value = f.name;
+    opt.textContent = `${f.name} (${f.type})`;
+    sel.append(opt);
+  }
+}
+
+function initProjectsUI(): void {
+  void refreshProjects();
+
+  (document.getElementById('project') as HTMLSelectElement).addEventListener('change', refreshProjectFiles);
+
+  document.getElementById('new-project')!.addEventListener('click', async () => {
+    const nameInput = document.getElementById('newProjectName') as HTMLInputElement;
+    const name = nameInput.value.trim();
+    const sym = Number(el('sym').value);
+    if (!name || !sym) {
+      setStatus('Enter a project name and a sym');
+      return;
+    }
+    await window.repdev.projectCreate(name, sym);
+    nameInput.value = '';
+    await refreshProjects(`${name}|${sym}`);
+    setStatus(`Created project "${name}" [SYM ${sym}]`);
+  });
+
+  document.getElementById('del-project')!.addEventListener('click', async () => {
+    const project = findProject(selectedProjectKey());
+    if (!project) return;
+    await window.repdev.projectDelete(project.name, project.sym);
+    await refreshProjects('');
+    setStatus(`Deleted project "${project.name}"`);
+  });
+
+  document.getElementById('add-to-project')!.addEventListener('click', async () => {
+    const project = findProject(selectedProjectKey());
+    const name = el('fileName').value.trim();
+    if (!project) {
+      setStatus('Select a project first');
+      return;
+    }
+    if (!name) {
+      setStatus('Enter a REPGEN name to add');
+      return;
+    }
+    await window.repdev.projectAddFile(project.name, project.sym, {
+      sym: project.sym,
+      name,
+      type: FileType.REPGEN,
+    });
+    await refreshProjects();
+    setStatus(`Added ${name} to "${project.name}"`);
+  });
+
+  // Selecting a file in the project opens it.
+  (document.getElementById('project-files') as HTMLSelectElement).addEventListener('change', (e) => {
+    const fileName = (e.target as HTMLSelectElement).value;
+    if (!fileName) return;
+    el('fileName').value = fileName;
+    void openFile();
+  });
+}
+
 initConfigUI(); // restore saved fields + wire profile controls
+initProjectsUI(); // load + wire project controls
 
 document.getElementById('connect')!.addEventListener('click', () => void connect());
 document.getElementById('open')!.addEventListener('click', () => void openFile());

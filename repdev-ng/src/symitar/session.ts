@@ -132,9 +132,15 @@ export class DirectSymitarSession implements SymitarSession {
 
   private logFn?: (message: string) => void;
   private traceConnect = false;
+  private verbose = false;
 
   isConnected(): boolean {
     return this.connected;
+  }
+
+  /** When true, raw I/O is traced for ALL operations, not just the handshake. */
+  setVerbose(on: boolean): void {
+    this.verbose = on;
   }
 
   private log(message: string): void {
@@ -151,6 +157,13 @@ export class DirectSymitarSession implements SymitarSession {
 
   private write(strOrCmd: string | Command): void {
     if (!this.transport) throw new Error('Not connected');
+    if (this.verbose) {
+      const label =
+        typeof strOrCmd === 'string'
+          ? DirectSymitarSession.sanitize(strOrCmd, 80)
+          : `cmd ${strOrCmd.command}`;
+      this.log(`send: ${label}`);
+    }
     this.transport.write(typeof strOrCmd === 'string' ? strOrCmd : strOrCmd.sendStr());
   }
 
@@ -173,6 +186,7 @@ export class DirectSymitarSession implements SymitarSession {
     if (cmd.command === 'MsgDlg' && (cmd.get('Text') ?? '').indexOf('From PID') !== -1) {
       return this.readNextCommand();
     }
+    if (this.verbose) this.log(`recv: cmd ${cmd.command}`);
     return cmd;
   }
 
@@ -200,10 +214,10 @@ export class DirectSymitarSession implements SymitarSession {
       this.traceConnect = true;
       this.transport?.trace?.(
         (recv) => {
-          if (this.traceConnect) this.log(`<< ${DirectSymitarSession.sanitize(recv, 400)}`);
+          if (this.traceConnect || this.verbose) this.log(`<< ${DirectSymitarSession.sanitize(recv, 400)}`);
         },
         (send) => {
-          if (this.traceConnect) this.log(`>> ${DirectSymitarSession.sanitize(send, 400)}`);
+          if (this.traceConnect || this.verbose) this.log(`>> ${DirectSymitarSession.sanitize(send, 400)}`);
         },
       );
     };

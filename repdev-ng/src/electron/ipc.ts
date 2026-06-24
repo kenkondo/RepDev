@@ -4,6 +4,7 @@
  * wiring can be unit-tested with a fake.
  */
 import { EditorService } from '../app/editor-service.js';
+import { ProjectManager } from '../app/project-manager.js';
 import { IPC, type ConnectArgs } from './ipc-contract.js';
 import type { CompileMode } from '../app/editor-service.js';
 import type { PrintLptOptions } from '../symitar/session.js';
@@ -48,4 +49,31 @@ export function registerIpc(ipc: IpcHandlerRegistrar, service: EditorService): v
   ipc.handle(IPC.printFileLPT, (_e, file: SymitarFile, queue: number, opts?: PrintLptOptions) =>
     service.printFileLPT(file, queue, opts),
   );
+  ipc.handle(IPC.setVerbose, (_e, on: boolean) => service.setVerbose(on));
+}
+
+/** Registers project CRUD handlers, persisting after each mutation. */
+export function registerProjectIpc(ipc: IpcHandlerRegistrar, projects: ProjectManager): void {
+  const persist = async (): Promise<void> => {
+    await projects.save();
+  };
+  ipc.handle(IPC.projectsList, () => projects.list());
+  ipc.handle(IPC.projectCreate, async (_e, name: string, sym: number) => {
+    const p = projects.addProject(name, sym);
+    await persist();
+    return p;
+  });
+  ipc.handle(IPC.projectDelete, async (_e, name: string, sym: number) => {
+    const ok = projects.removeProject(name, sym);
+    await persist();
+    return ok;
+  });
+  ipc.handle(IPC.projectAddFile, async (_e, name: string, sym: number, file: SymitarFile) => {
+    projects.addFile(name, sym, file);
+    await persist();
+  });
+  ipc.handle(IPC.projectRemoveFile, async (_e, name: string, sym: number, file: SymitarFile) => {
+    projects.removeFile(name, sym, file);
+    await persist();
+  });
 }

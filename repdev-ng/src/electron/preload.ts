@@ -28,6 +28,12 @@ const api: RepDevApi = {
     ipcRenderer.on(LOG_EVENT, listener);
     return () => ipcRenderer.removeListener(LOG_EVENT, listener);
   },
+  setVerbose: (on) => ipcRenderer.invoke(IPC.setVerbose, on),
+  projectsList: () => ipcRenderer.invoke(IPC.projectsList),
+  projectCreate: (name, sym) => ipcRenderer.invoke(IPC.projectCreate, name, sym),
+  projectDelete: (name, sym) => ipcRenderer.invoke(IPC.projectDelete, name, sym),
+  projectAddFile: (name, sym, file) => ipcRenderer.invoke(IPC.projectAddFile, name, sym, file),
+  projectRemoveFile: (name, sym, file) => ipcRenderer.invoke(IPC.projectRemoveFile, name, sym, file),
 };
 
 contextBridge.exposeInMainWorld('repdev', api);
