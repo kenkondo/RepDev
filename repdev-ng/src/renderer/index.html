@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RepDev NG</title>
+    <style>
+      html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
+      #app { display: flex; flex-direction: column; height: 100%; }
+      #toolbar { display: flex; gap: 6px; padding: 6px; align-items: center; background: #1e1e1e; color: #ddd; flex-wrap: wrap; }
+      #toolbar input { background: #2d2d2d; color: #eee; border: 1px solid #444; padding: 3px 5px; }
+      #toolbar input[type='number'] { width: 70px; }
+      #toolbar button { background: #0e639c; color: #fff; border: none; padding: 4px 10px; cursor: pointer; }
+      #toolbar button:hover { background: #1177bb; }
+      #configbar {
+        display: flex; gap: 6px; padding: 4px 6px; align-items: center;
+        background: #252526; color: #bbb; font-size: 12px; flex-wrap: wrap;
+        border-bottom: 1px solid #333;
+      }
+      #configbar select, #configbar input,
+      #projectbar select, #projectbar input { background: #2d2d2d; color: #eee; border: 1px solid #444; padding: 2px 5px; }
+      #configbar button, #projectbar button { background: #3a3d41; color: #fff; border: none; padding: 3px 8px; cursor: pointer; }
+      #configbar button:hover, #projectbar button:hover { background: #4a4d51; }
+      #projectbar {
+        display: flex; gap: 6px; padding: 4px 6px; align-items: center;
+        background: #252526; color: #bbb; font-size: 12px; flex-wrap: wrap;
+        border-bottom: 1px solid #333;
+      }
+      #status { margin-left: auto; font-size: 12px; color: #9cdcfe; }
+      #editor { flex: 1; min-height: 0; }
+      #logpanel {
+        height: 160px; overflow-y: auto; background: #0c0c0c; color: #cccccc;
+        font-family: Consolas, "Courier New", monospace; font-size: 11px;
+        padding: 4px 8px; white-space: pre-wrap; word-break: break-all;
+        border-top: 1px solid #333;
+      }
+      #logpanel .log-head {
+        display: flex; justify-content: space-between; color: #888; position: sticky; top: 0;
+        background: #0c0c0c; padding-bottom: 2px;
+      }
+      #logpanel button { background: #333; color: #ccc; border: none; font-size: 10px; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="configbar">
+        <label>Profile:</label>
+        <select id="profile"><option value="">— last used —</option></select>
+        <input id="profileName" placeholder="name to save as" />
+        <button id="save-profile">Save</button>
+        <button id="del-profile">Delete</button>
+        <label style="margin-left:8px;"><input type="checkbox" id="remember-pw" checked /> remember passwords</label>
+      </div>
+      <div id="toolbar">
+        <input id="server" placeholder="server" value="symitartest" />
+        <input id="aixUser" placeholder="AIX user" />
+        <input id="aixPass" type="password" placeholder="AIX pass" />
+        <input id="sym" type="number" placeholder="sym" value="999" />
+        <input id="userId" type="password" placeholder="user id" />
+        <input id="sshCommand" placeholder="ssh command" value="/usr/bin/ksh -l" title="Login shell to run over SSH (must set PATH so 'sym' resolves)" style="width:130px;" />
+        <button id="connect">Connect</button>
+        <input id="fileName" placeholder="REPGEN name" />
+        <button id="open">Open</button>
+        <button id="save">Save + Check</button>
+        <button id="install">Save + Install</button>
+        <button id="diff">Diff vs Git</button>
+        <span id="status">Disconnected</span>
+      </div>
+      <div id="projectbar">
+        <label>Project:</label>
+        <select id="project"><option value="">— none —</option></select>
+        <input id="newProjectName" placeholder="new project name" />
+        <button id="new-project">New</button>
+        <button id="del-project">Delete</button>
+        <button id="add-to-project">+ current RepGen</button>
+        <label>Files:</label>
+        <select id="project-files"><option value="">—</option></select>
+      </div>
+      <div id="editor"></div>
+      <div id="logpanel">
+        <div class="log-head">
+          <span>Connection log</span>
+          <span>
+            <label style="margin-right:8px;"><input type="checkbox" id="verbose" /> verbose (log all comms)</label>
+            <button id="log-clear">clear</button>
+          </span>
+        </div>
+        <div id="log-lines"></div>
+      </div>
+      <div id="diff-overlay" style="display:none; position:absolute; inset:40px; border:2px solid #0e639c; background:#1e1e1e;">
+        <button id="diff-close" style="position:absolute; right:4px; top:4px; z-index:2;">Close</button>
+        <div id="diff-editor" style="position:absolute; inset:0;"></div>
+      </div>
+    </div>
+    <script type="module" src="./renderer.ts"></script>
+  </body>
+</html>

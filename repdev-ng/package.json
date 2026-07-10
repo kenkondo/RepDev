@@ -1,0 +1,104 @@
+{
+  "name": "repdev-ng",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RepDev NG - RepGen IDE for Symitar (Electron rewrite of the Java/SWT app)",
+  "license": "GPL-3.0-or-later",
+  "author": {
+    "name": "Rize Credit Union",
+    "email": "support@repdev.org"
+  },
+  "type": "module",
+  "main": "out/main/main.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "package": "npm run build && node scripts/package-portable.mjs",
+    "package:zip": "npm run package && node scripts/zip-bundle.mjs",
+    "package:installer": "npm run build && electron-builder --win nsis",
+    "package:builder-portable": "npm run build && electron-builder --win portable"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.0.1",
+    "@types/node": "^22.10.0",
+    "@types/ssh2": "^1.15.5",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.0",
+    "electron-vite": "^2.3.0",
+    "monaco-editor": "^0.52.0",
+    "typescript": "^5.7.0",
+    "vite": "^5.4.0",
+    "vitest": "^2.1.0"
+  },
+  "dependencies": {
+    "simple-git": "^3.36.0",
+    "ssh2": "^1.17.0"
+  },
+  "build": {
+    "appId": "org.repdev.ng",
+    "productName": "RepDev NG",
+    "copyright": "Copyright © 2007-2026 Jake Poznanski, Ryan Schultz, Sean Delaney; rewrite contributions Rize Credit Union",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*",
+      "package.json",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/*.{ts,map}",
+      "!**/.{eslintrc.json,prettierrc,editorconfig,gitignore,gitattributes}"
+    ],
+    "asarUnpack": [
+      "node_modules/simple-git/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "RepDev-NG-${version}-${arch}-${target}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "RepDev NG"
+    },
+    "portable": {
+      "artifactName": "RepDev-NG-${version}-portable.exe"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development"
+    }
+  }
+}
